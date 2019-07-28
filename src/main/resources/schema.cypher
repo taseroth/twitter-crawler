@@ -1,0 +1,13 @@
+CREATE CONSTRAINT ON (n:Tweet)
+ASSERT n.id IS UNIQUE;
+
+CREATE CONSTRAINT ON (p:User)
+ASSERT p.id IS UNIQUE;
+
+CREATE CONSTRAINT ON (n:Hashtag)
+ASSERT n.name IS UNIQUE;
+
+CREATE CONSTRAINT ON (l:Link)
+ASSERT l.url IS UNIQUE;
+
+create index on:User(screenName)
