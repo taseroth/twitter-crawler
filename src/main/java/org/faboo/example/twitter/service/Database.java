@@ -256,8 +256,8 @@ public class Database {
             return session.readTransaction(tx -> tx.run(
                     " match (n:User)-[:POSTS]->(:Tweet)<-[:TAGS]-(h:Hashtag)-[tags:TAGS]->(:Tweet) " +
                     "    where n.id = $user_id " +
-                    "    with h.name as hastag, count(tags) as weight order by weight desc limit 10 " +
-                    "    return hastag",
+                    "    with h.name as hashtag, count(tags) as weight order by weight desc limit 10 " +
+                    "    return hashtag",
                     parameters("user_id", user.getId())
             ).stream()
                     .map(rec -> rec.get("hashtag").asString())

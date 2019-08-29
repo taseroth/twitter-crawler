@@ -26,7 +26,7 @@ public class CrawlService implements ApplicationRunner {
 
     private final Set<Long> treeScanned = new HashSet<>();
 
-    private int maxDepth = 4;
+    private int maxDepth = 3;
 
     public CrawlService(TwitterService twitterService, Database database) {
         this.twitterService = twitterService;
@@ -68,16 +68,30 @@ public class CrawlService implements ApplicationRunner {
            // followUser(user, 0, false);
 
             log.info("scanned {} users", treeScanned.size());
-
-            if (args.containsOption("follow-user-hashtags")) {
-                queryTopHashtagForUser(user);
-            }
         }
 
-        if (args.containsOption("follow-hashtags")) {
-            String startHash = args.getOptionValues("follow-hashtags").stream()
+        if (args.containsOption("follow-user-hashtags")) {
+            String screenName = args.getOptionValues("follow-user-hashtags").stream()
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("follow-hashtags need value"));
+                    .orElseThrow(() -> new IllegalArgumentException("follow-user-hashtags need value"));
+            User user = database.getUserByScreenName(screenName)
+                    .orElseGet(() -> {
+                        try {
+                            var u = twitterService.lookupUser(screenName);
+                            database.persistUsers(Collections.singleton(u));
+                            return u;
+                        } catch (UserNotReadableException e) {
+                            throw new IllegalArgumentException("user is private, can't start here");
+                        }
+
+                    });
+            queryTopHashtagForUser(user);
+        }
+
+        if (args.containsOption("follow-hashtag")) {
+            String startHash = args.getOptionValues("follow-hashtag").stream()
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("follow-hashtag need value"));
             Optional<String> nextHashtagToScan = database.getNextHashtagToScan(startHash, maxDepth);
             while (nextHashtagToScan.isPresent()) {
                 queryForHashtag(new Hashtag(nextHashtagToScan.get()));
