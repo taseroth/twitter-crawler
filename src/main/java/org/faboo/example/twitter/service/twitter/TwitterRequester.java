@@ -233,15 +233,15 @@ class TwitterRequester {
                 throws UserNotReadableException, RetryLaterException {
             waitUntilUsable(resource);
             try {
-                log.debug("requesting {} for {} using {}", resource, value, this);
+                log.debug("requesting {} for {} using {}", resource, value, TwitterRequester.this);
                 ResponseList<T> response = function.wrap(value);
                 extractRateLimit(resource, response.getRateLimitStatus());
 
                 return response;
 
             } catch (TwitterException e) {
-                if (e.getStatusCode() == 401) {
-                    log.info("resource {} is protected", value);
+                if (e.getStatusCode() == 401  || e.getStatusCode() == 404) {
+                    log.info("resource {} is not readable", value);
                     limits.get(resource).decrementRequests();
                     throw new UserNotReadableException();
                 }
