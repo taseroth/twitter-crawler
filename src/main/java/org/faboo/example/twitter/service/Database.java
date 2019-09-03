@@ -265,4 +265,14 @@ public class Database {
                     .collect(Collectors.toUnmodifiableSet()));
         }
     }
+
+    List<Long> getEmptyTweets() {
+        try (Session session = driver.session()) {
+            return session.readTransaction(tx -> tx.run(
+                    "match (t:Tweet) where not exists(t.text) return t.id as id"
+            )).stream()
+                    .map(rec -> rec.get("id").asLong())
+                    .collect(Collectors.toUnmodifiableList());
+        }
+    }
 }

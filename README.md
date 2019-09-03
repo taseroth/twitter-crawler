@@ -60,3 +60,7 @@ user afterwards.
 ### follow a list of hashtags
 To request (and store) depended hashtags (often used together), provide a starting hashtag via `--follow-hashtag=aHashTag`. This will 
 retrieve and store hashtags up to the provided `--depth`.
+
+### hydrate tweets
+Referenced tweets are sometimes returned with only the ID and the author. By providing ```--hydrate-tweets```
+as option, the program tries to load additional data from twitter. In about 10% of tweets, this fails. For whatever reason.

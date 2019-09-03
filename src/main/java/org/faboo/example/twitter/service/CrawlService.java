@@ -1,5 +1,6 @@
 package org.faboo.example.twitter.service;
 
+import com.google.common.collect.Lists;
 import org.faboo.example.twitter.data.Hashtag;
 import org.faboo.example.twitter.data.Tweet;
 import org.faboo.example.twitter.data.User;
@@ -98,7 +99,25 @@ public class CrawlService implements ApplicationRunner {
                 nextHashtagToScan = database.getNextHashtagToScan(startHash, maxDepth);
             }
         }
+        if (args.containsOption("hydrate-tweets")) {
+            hydrateTweets();
+        }
         log.info("done crawling");
+
+    }
+
+    /**
+     * Referenced tweets sometimes contain only the id and the author.
+     * This tries to load all other data from twitter. Unfortunately, in ~ 10% of the tweets, we get no result back.
+     * To avoid marking tweets in the database, all empty tweets are loaded from the database and than batch processed.
+     * Not optimal, but worked for ~ 2 mill tweets.
+     */
+    private void hydrateTweets() {
+
+        log.info("start filling in details of tweets");
+        List<Long> emptyTweets = database.getEmptyTweets();
+        Lists.partition(emptyTweets,1000)
+                .forEach(ids -> database.persistTweets(twitterService.fetchTweets(ids)));
     }
 
     private void fetchAndUpdateTweetsOf(User user) {
