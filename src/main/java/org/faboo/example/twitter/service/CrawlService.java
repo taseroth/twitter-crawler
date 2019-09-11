@@ -116,8 +116,13 @@ public class CrawlService implements ApplicationRunner {
 
         log.info("start filling in details of tweets");
         List<Long> emptyTweets = database.getEmptyTweets();
-        Lists.partition(emptyTweets,1000)
-                .forEach(ids -> database.persistTweets(twitterService.fetchTweets(ids)));
+        int cnt = 0;
+        for (List<Long> ids : Lists.partition(emptyTweets, 1000)) {
+            Set<Tweet> tweets = twitterService.fetchTweets(ids);
+            cnt += tweets.size();
+            database.persistTweets(tweets);
+        }
+        log.info("retrieved and stored {} tweets", cnt);
     }
 
     private void fetchAndUpdateTweetsOf(User user) {
