@@ -3,7 +3,10 @@ package org.faboo.example.twitter.service;
 import org.faboo.example.twitter.data.Hashtag;
 import org.faboo.example.twitter.data.Tweet;
 import org.faboo.example.twitter.data.User;
-import org.neo4j.driver.*;
+import org.faboo.example.twitter.util.ResolveResult;
+import org.neo4j.driver.Driver;
+import org.neo4j.driver.Session;
+import org.neo4j.driver.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +26,7 @@ public class Database {
     }
 
     void persistTweets(Collection<Tweet> tweets) {
-        log.debug("peristing {} tweets", tweets.size());
+        log.debug("persisting {} tweets", tweets.size());
 
         try (Session session = driver.session()) {
             session.writeTransaction(tx -> {
@@ -39,14 +42,13 @@ public class Database {
                            "     merge (h:Hashtag {name:tag}) " +
                            "     merge (h)-[:TAGS]->(t)" +
                            "        ) " +
-                           " foreach(mention in $mentiones | " +
+                           " foreach(mention in $mentions | " +
                            "     merge (m:User {id:mention.id}) " +
                            "        on create set m.screenName = mention.screenName, m.id = mention.id " +
                            "     merge (t)-[:MENTIONED]->(m)" +
                                     " ) " +
                            " foreach( url in $urls | " +
                            "     merge (l:Link {url:url}) " +
-                           "         on create set l.url = url " +
                            "     merge (l)<-[:CONTAINS]-(t) " +
                            " ) ",
                             parameters(
@@ -55,7 +57,7 @@ public class Database {
                                     "author_id", tweet.getUser().getId(),
                                     "author_props", tweet.getUser().getProps(),
                                     "hashtags", tweet.getHashtagsTags(),
-                                    "mentiones", tweet.getMentionedUsers(),
+                                    "mentions", tweet.getMentionedUsers(),
                                     "urls", tweet.getUrls())).consume();
 
                     if (tweet.getRetweetedTweet() != null) {
@@ -137,7 +139,8 @@ public class Database {
                             parameters("user_id", user.getId(),
                                     "user_props", user.getProps(),
                                     "friends", user.getFriendsAsMap(),
-                                    "followers", user.getFollowersAsMap())).consume();
+                                    "followers", user.getFollowersAsMap())
+                            ).consume();
                 }
                 tx.success();
                 return null;
@@ -155,7 +158,61 @@ public class Database {
                         parameters(
                                 "name", hashtag.getName(),
                                 "lastTweetSeen", hashtag.getLastTweetSeen(),
-                                "lastScanned", hashtag.getLastScanned())).consume();
+                                "lastScanned", hashtag.getLastScanned())
+                                ).consume();
+                tx.success();
+                return null;
+            });
+        }
+    }
+
+    void persistLinks(Map<String, ResolveResult> resolvedLinks) {
+
+        List<Map<String,Object>> goodLinks = resolvedLinks.entrySet().stream()
+                .filter(entry -> !entry.getValue().isError())
+                .map(e -> {
+                    Map<String,Object> map = new HashMap<>();
+                    map.put("link", e.getKey());
+                    map.put("url", e.getValue().getUrl());
+                    map.put("site", e.getValue().getHostName());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        List<Map<String,Object>> errorLinks = resolvedLinks.entrySet().stream()
+                .filter(e -> e.getValue().isError())
+                .map(e -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("link", e.getKey());
+                    map.put("errorCode", e.getValue().getError().getStatus());
+                    map.put("errorMessage", e.getValue().getError().getMessage());
+                    return map;
+                })
+                .collect(Collectors.toList());
+
+        log.debug("persisting {} good Links and {} error links", goodLinks.size(), errorLinks.size());
+
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                        tx.run("foreach( link in $links | " +
+                                        " merge (l:Link {url:link.link}) " +
+                                        " merge (u:Url {url:link.url}) " +
+                                        " merge (s:Site {name:link.site}) " +
+                                        " merge (l)-[:LINKS_TO]->(u)-[:PART_OF]->(s) )",
+                                parameters("links", goodLinks)
+                              ).consume();
+                tx.success();
+                return null;
+            });
+        }
+        try (Session session = driver.session()) {
+            session.writeTransaction(tx -> {
+                tx.run("foreach( link in $links | " +
+                                " merge (l:Link {url:link.link}) " +
+                                "   on create set l.errorCode = link.errorCode," +
+                                "    l.errorMessage = link.errorMessage )",
+                        parameters("links", errorLinks)
+                ).consume();
                 tx.success();
                 return null;
             });
@@ -273,6 +330,15 @@ public class Database {
             )).stream()
                     .map(rec -> rec.get("id").asLong())
                     .collect(Collectors.toUnmodifiableList());
+        }
+    }
+
+    public Set<User> getUsersForHashtag(Hashtag hashtag) {
+        try (Session session= driver.session()) {
+            return session.readTransaction(tx -> tx.run(
+                    " match (u:User)-[:POSTS]->()<-[:TAGS]-(t:Hashtag {name:$hashtag}) return u",
+                    parameters("hashtag", hashtag.getName())).stream()
+                    .map(rec -> new User(rec.get("u").asMap())).collect(Collectors.toUnmodifiableSet()));
         }
     }
 }

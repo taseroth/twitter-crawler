@@ -7,11 +7,15 @@ import org.faboo.example.twitter.data.User;
 import org.faboo.example.twitter.service.twitter.Query;
 import org.faboo.example.twitter.service.twitter.TwitterService;
 import org.faboo.example.twitter.service.twitter.UserNotReadableException;
+import org.faboo.example.twitter.util.ResolveResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -24,14 +28,17 @@ public class CrawlService implements ApplicationRunner {
 
     private final TwitterService twitterService;
     private final Database database;
+    private final ForkJoinResolver urlResolver;
 
     private final Set<Long> treeScanned = new HashSet<>();
 
     private int maxDepth = 3;
 
-    public CrawlService(TwitterService twitterService, Database database) {
+    public CrawlService(TwitterService twitterService, Database database, ForkJoinResolver forkJoinResolver)
+            throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException {
         this.twitterService = twitterService;
         this.database = database;
+        urlResolver = forkJoinResolver;
     }
 
     @Override
@@ -121,6 +128,7 @@ public class CrawlService implements ApplicationRunner {
             Set<Tweet> tweets = twitterService.fetchTweets(ids);
             cnt += tweets.size();
             database.persistTweets(tweets);
+            resolveAndPersistUrlInTweets(tweets);
         }
         log.info("retrieved and stored {} tweets", cnt);
     }
@@ -139,6 +147,7 @@ public class CrawlService implements ApplicationRunner {
             tweetsToPersist.addAll(tweets);
             log.debug("tweets found: {}", tweetsToPersist.size());
             database.persistTweets(tweetsToPersist);
+            resolveAndPersistUrlInTweets(tweetsToPersist);
         } catch (UserNotReadableException e) {
             user.setProtected(true);
             user.setTweetsLastScanned(LocalDateTime.now());
@@ -232,6 +241,15 @@ public class CrawlService implements ApplicationRunner {
         queryFor(new Query(Collections.singleton(hashtag.getHashtag())));
         hashtag.setLastScanned(LocalDateTime.now());
         database.persistHashtag(hashtag);
+        updateUsersOfHashtag(hashtag);
+    }
+
+    private void updateUsersOfHashtag(Hashtag hashtag) {
+       Set<User> users = database.getUsersForHashtag(hashtag);
+
+       maxDepth = 0;
+
+       users.forEach(user -> followUser(user,0));
     }
 
     private void queryFor(Query query) {
@@ -244,6 +262,21 @@ public class CrawlService implements ApplicationRunner {
 
         log.info("tweets found: {}", tweetsToPersist.size());
         database.persistTweets(tweetsToPersist);
+        resolveAndPersistUrlInTweets(tweetsToPersist);
+    }
+
+    private void resolveAndPersistUrlInTweets(Collection<Tweet> tweets) {
+
+        Set<String> urls = tweets.stream()
+                .filter(t -> ! t.getUrls().isEmpty())
+                .map(Tweet::getUrls).flatMap(Collection::stream)
+                .collect(Collectors.toSet());
+
+
+        Map<String,ResolveResult> result = urlResolver.resolve(urls);
+
+        database.persistLinks(result);
+
 
     }
 
