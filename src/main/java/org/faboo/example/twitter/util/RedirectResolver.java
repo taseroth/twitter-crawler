@@ -33,7 +33,7 @@ public class RedirectResolver {
 
     public ResolveResult resolve(String url) {
 
-        log.debug("resolving {}", url);
+        log.trace("resolving {}", url);
 
         try {
             int hopsRemaining = 10;
@@ -64,6 +64,9 @@ public class RedirectResolver {
 
             int status = response.getStatusLine().getStatusCode();
             if (status == HttpURLConnection.HTTP_OK) {
+                if (urlString.length()>1000) {
+                    throw new ResolveException(new ResolveError(-2, "url to long:" + urlString.length()));
+                }
                 return ResolveResult.resolved(urlString);
             }
 

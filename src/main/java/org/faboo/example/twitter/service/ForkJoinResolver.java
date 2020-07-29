@@ -9,11 +9,16 @@ import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.ssl.SSLContextBuilder;
 import org.faboo.example.twitter.util.RedirectResolver;
 import org.faboo.example.twitter.util.ResolveResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinTask;
@@ -21,7 +26,9 @@ import java.util.concurrent.RecursiveTask;
 
 public class ForkJoinResolver {
 
-    CloseableHttpClient httpClient;
+    private final static Logger log = LoggerFactory.getLogger(ForkJoinResolver.class);
+
+    private final CloseableHttpClient httpClient;
     private final ForkJoinPool pool;
 
     public ForkJoinResolver() throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException {
@@ -43,11 +50,13 @@ public class ForkJoinResolver {
                 .setSSLSocketFactory(connectionFactory)
                 .disableRedirectHandling().build();
 
-        pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors() * 10);
+        pool = new ForkJoinPool(500);
     }
 
     public Map<String,ResolveResult> resolve(Collection<String> links) {
 
+        log.debug("start resolving {} urls", links.size());
+        Instant start = Instant.now();
         ForkJoinTask<Map<String,ResolveResult>> starter = pool.submit(new RecursiveTask<>() {
             @Override
             protected Map<String,ResolveResult> compute() {
@@ -67,7 +76,10 @@ public class ForkJoinResolver {
                 return results;
             }
         });
-        return starter.join();
+        Map<String, ResolveResult> result = starter.join();
+        log.debug("resolving {} links took {} seconds", links.size(),
+                Duration.between(start, Instant.now()).get(ChronoUnit.SECONDS));
+        return result;
     }
 
 

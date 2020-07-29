@@ -210,7 +210,9 @@ public class Database {
                 tx.run("foreach( link in $links | " +
                                 " merge (l:Link {url:link.link}) " +
                                 "   on create set l.errorCode = link.errorCode," +
-                                "    l.errorMessage = link.errorMessage )",
+                                "    l.errorMessage = link.errorMessage" +
+                                "   on match set l.errorCode = link.errorCode, " +
+                                "     l.errorMessage = link.errorMessage )",
                         parameters("links", errorLinks)
                 ).consume();
                 tx.success();
@@ -339,6 +341,16 @@ public class Database {
                     " match (u:User)-[:POSTS]->()<-[:TAGS]-(t:Hashtag {name:$hashtag}) return u",
                     parameters("hashtag", hashtag.getName())).stream()
                     .map(rec -> new User(rec.get("u").asMap())).collect(Collectors.toUnmodifiableSet()));
+        }
+    }
+
+    public Collection<String> findLinksToResolve() {
+        try (Session session= driver.session()) {
+            return session.readTransaction(tx -> tx.run(
+                    "match (l:Link) where not exists(l.errorCode) " +
+                    " and not exists((l)-[:LINKS_TO]->()) return l.url as link limit 500").stream()
+                    .map(rec -> rec.get("link").asString())
+                    .collect(Collectors.toUnmodifiableSet()));
         }
     }
 }

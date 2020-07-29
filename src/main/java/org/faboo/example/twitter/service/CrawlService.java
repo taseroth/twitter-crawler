@@ -13,9 +13,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -34,8 +31,9 @@ public class CrawlService implements ApplicationRunner {
 
     private int maxDepth = 3;
 
-    public CrawlService(TwitterService twitterService, Database database, ForkJoinResolver forkJoinResolver)
-            throws KeyStoreException, NoSuchAlgorithmException, KeyManagementException {
+    private boolean resolveUrl = true;
+
+    public CrawlService(TwitterService twitterService, Database database, ForkJoinResolver forkJoinResolver) {
         this.twitterService = twitterService;
         this.database = database;
         urlResolver = forkJoinResolver;
@@ -43,6 +41,17 @@ public class CrawlService implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+
+        if (args.containsOption("resolve-url")) {
+            resolveUrl = args.getOptionValues("resolve-url").stream()
+                    .allMatch(Boolean::valueOf);
+        }
+
+        log.info("resolving URLs : {}", resolveUrl);
+
+        if (args.containsOption("resolve-missing-links")) {
+            resolveUrls();
+        }
 
         if (args.containsOption("hash")) {
             args.getOptionValues("hash").forEach(tag -> queryForHashtag(new Hashtag(tag)));
@@ -265,13 +274,31 @@ public class CrawlService implements ApplicationRunner {
         resolveAndPersistUrlInTweets(tweetsToPersist);
     }
 
+    private void resolveUrls() {
+
+        log.info("start resolving missing links");
+        Collection<String> links;
+        do {
+            links = database.findLinksToResolve();
+            Map<String,ResolveResult> result = urlResolver.resolve(links);
+            database.persistLinks(result);
+        } while (!links.isEmpty());
+    }
+
     private void resolveAndPersistUrlInTweets(Collection<Tweet> tweets) {
+
+        if (!resolveUrl) {
+            return;
+        }
 
         Set<String> urls = tweets.stream()
                 .filter(t -> ! t.getUrls().isEmpty())
                 .map(Tweet::getUrls).flatMap(Collection::stream)
                 .collect(Collectors.toSet());
 
+        if (urls.isEmpty()) {
+            return;
+        }
 
         Map<String,ResolveResult> result = urlResolver.resolve(urls);
 

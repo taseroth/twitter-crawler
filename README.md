@@ -64,3 +64,8 @@ retrieve and store hashtags up to the provided `--depth`.
 ### hydrate tweets
 Referenced tweets are sometimes returned with only the ID and the author. By providing ```--hydrate-tweets```
 as option, the program tries to load additional data from twitter. In about 10% of tweets, this fails. For whatever reason.
+
+###
+The links in tweets often use url shorteners. To get the final url they point to and the site they are contained in the 
+program will try to resolve the url and create (:URL) and (:Site) nodes. This can be disabled by providing the 
+option `--resolve-url=false`
