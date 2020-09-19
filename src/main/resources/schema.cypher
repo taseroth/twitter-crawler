@@ -10,4 +10,10 @@ ASSERT n.name IS UNIQUE;
 CREATE CONSTRAINT ON (l:Link)
 ASSERT l.url IS UNIQUE;
 
-create index on:User(screenName)
+create index on:User(screenName);
+
+CREATE CONSTRAINT ON (u:Url)
+ASSERT u.url IS UNIQUE;
+
+CREATE CONSTRAINT ON (s:Site)
+ASSERT s.name IS UNIQUE;

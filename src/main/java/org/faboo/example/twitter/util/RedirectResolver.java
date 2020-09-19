@@ -2,13 +2,17 @@ package org.faboo.example.twitter.util;
 
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpHead;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.ArrayList;
+import java.util.Collection;
 
 /**
  * Resolver that follows http redirects to the end and report the final url.
@@ -56,38 +60,51 @@ public class RedirectResolver {
 
     private ResolveResult resolveOnce(String urlString) throws ResolveException {
 
-        HttpHead head;
-        head = new HttpHead(parseToUri(urlString));
-        head.setConfig(requestConfig);
+        Collection<HttpRequestBase> methods = new ArrayList<>(2);
 
-        try (CloseableHttpResponse response = httpClient.execute(head)) {
+        HttpRequestBase request;
 
-            int status = response.getStatusLine().getStatusCode();
-            if (status == HttpURLConnection.HTTP_OK) {
-                if (urlString.length()>1000) {
-                    throw new ResolveException(new ResolveError(-2, "url to long:" + urlString.length()));
+        request = new HttpHead(parseToUri(urlString));
+        request.setConfig(requestConfig);
+        methods.add(request);
+
+        request = new HttpGet(parseToUri(urlString));
+        request.setConfig(requestConfig);
+        methods.add(request);
+
+        for (HttpRequestBase method : methods) {
+            try (CloseableHttpResponse response = httpClient.execute(method)) {
+
+                int status = response.getStatusLine().getStatusCode();
+                if (status == HttpURLConnection.HTTP_OK) {
+                    if (urlString.length()>1000) {
+                        throw new ResolveException(new ResolveError(-2, "url to long:" + urlString.length()));
+                    }
+                    return ResolveResult.resolved(urlString);
                 }
-                return ResolveResult.resolved(urlString);
-            }
 
-            if (status == HttpURLConnection.HTTP_MOVED_TEMP
-                    || status == HttpURLConnection.HTTP_MOVED_PERM
-                    || status == HttpURLConnection.HTTP_SEE_OTHER) {
+                if (status == HttpURLConnection.HTTP_MOVED_TEMP
+                        || status == HttpURLConnection.HTTP_MOVED_PERM
+                        || status == HttpURLConnection.HTTP_SEE_OTHER) {
 
-                if (response.getLastHeader("Location") != null) {
-                    return ResolveResult.moved(urlString, response.getLastHeader("Location").getValue());
-                } else {
-                    log.error("{} returns  {}, but no location", urlString, status);
+                    if (response.getLastHeader("Location") != null) {
+                        return ResolveResult.moved(urlString, response.getLastHeader("Location").getValue());
+                    } else {
+                        log.error("{} returns  {}, but no location", urlString, status);
+                    }
+                } else if (status == HttpURLConnection.HTTP_BAD_METHOD) {
+                    // try with get
+                    continue;
                 }
+                throw new ResolveException(new ResolveError(status, response.getStatusLine().getReasonPhrase()));
+            } catch (UnknownHostException e) {
+                throw new ResolveException(new ResolveError(-6, findRootError(e)));
+            } catch (IOException e) {
+                log.trace("error resolving " + urlString, e);
+                throw new ResolveException(new ResolveError(-1, findRootError(e)));
             }
-            throw new ResolveException(new ResolveError(status, response.getStatusLine().getReasonPhrase()));
-        } catch (UnknownHostException e) {
-            throw new ResolveException(new ResolveError(-6, findRootError(e)));
         }
-        catch (IOException e) {
-            log.trace("error resolving " + urlString, e);
-            throw new ResolveException(new ResolveError(-1, findRootError(e)));
-        }
+        throw new ResolveException(new ResolveError(-7, "methods exhausted"));
     }
 
     private URI parseToUri(String urlString) throws ResolveException {

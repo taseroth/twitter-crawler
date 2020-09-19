@@ -111,7 +111,6 @@ public class Database {
                                 )).consume();
                     }
                 }
-                tx.success();
                 return null;
             });
         }
@@ -142,7 +141,6 @@ public class Database {
                                     "followers", user.getFollowersAsMap())
                             ).consume();
                 }
-                tx.success();
                 return null;
             });
         }
@@ -160,7 +158,6 @@ public class Database {
                                 "lastTweetSeen", hashtag.getLastTweetSeen(),
                                 "lastScanned", hashtag.getLastScanned())
                                 ).consume();
-                tx.success();
                 return null;
             });
         }
@@ -201,7 +198,6 @@ public class Database {
                                         " merge (l)-[:LINKS_TO]->(u)-[:PART_OF]->(s) )",
                                 parameters("links", goodLinks)
                               ).consume();
-                tx.success();
                 return null;
             });
         }
@@ -215,7 +211,6 @@ public class Database {
                                 "     l.errorMessage = link.errorMessage )",
                         parameters("links", errorLinks)
                 ).consume();
-                tx.success();
                 return null;
             });
         }
@@ -227,7 +222,7 @@ public class Database {
             return Collections.emptySet();
         }
 
-        log.info("checking {} tweets for existance in database", toCheck.size());
+        log.info("checking {} tweets for existence in database", toCheck.size());
         List<Long> ids = new ArrayList<>(toCheck);
         try (Session session= driver.session()) {
 
